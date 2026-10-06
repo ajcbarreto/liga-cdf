@@ -52,13 +52,18 @@ module.exports = async (req, res) => {
     method: 'PUT',
     headers: {
       Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Authorization: `Bearer ${(process.env.GITHUB_TOKEN || '').trim()}`,
       'Content-Type': 'application/json',
       'User-Agent': 'liga-cdf'
     },
     body: JSON.stringify(payload)
   });
-  if (!r.ok) return res.status(r.status === 409 || r.status === 422 ? 409 : 502).json({ error: 'github', status: r.status });
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).message || ''; } catch {}
+    console.error('GitHub PUT falhou', r.status, repo(), detail);
+    return res.status(r.status === 409 ? 409 : 502).json({ error: 'github', status: r.status, repo: repo(), detail });
+  }
   const j = await r.json();
   return res.status(200).json({ sha: j.content.sha });
 };

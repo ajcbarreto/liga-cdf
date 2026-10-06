@@ -170,7 +170,11 @@
           continue;
         }
         if (r.status === 401 || r.status === 403) throw new Error('Sem permissão. Verifica o token.');
-        if (pinMode && r.status === 502) throw new Error('O servidor não conseguiu gravar no GitHub. Verifica o token no Vercel.');
+        if (pinMode && r.status === 502) {
+          const j = await r.json().catch(() => ({}));
+          const why = { 401: 'token inválido ou expirado', 403: 'token sem permissão de escrita (Contents: Read and write)', 404: `token sem acesso ao repo ${j.repo || ''}` }[j.status] || `${j.status} ${j.detail || ''}`;
+          throw new Error(`O GitHub recusou: ${why}. Corrige o GITHUB_TOKEN no Vercel e faz Redeploy.`);
+        }
         throw new Error(`Erro ao gravar (${r.status}).`);
       }
       throw new Error('Conflito ao gravar. Tenta outra vez.');
