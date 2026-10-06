@@ -47,5 +47,26 @@
       "name": "Tiago Cerqueira"
     }
   ],
-  "matches": []
+  "matches": [
+    {
+      "id": "me0m8t6",
+      "date": "2026-10-06",
+      "created": 1791326896318,
+      "teamA": [
+        "6whcr3f",
+        "uc2cecz",
+        "p7rbdlx",
+        "f3yp0s5",
+        "kzkn4n3"
+      ],
+      "teamB": [
+        "eeok2z4",
+        "nl24uk5",
+        "abcadgc",
+        "oq76lnj",
+        "cqmqrzn"
+      ],
+      "result": "A"
+    }
+  ]
 }
