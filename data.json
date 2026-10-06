@@ -5,6 +5,11 @@
     "pointsDraw": 1,
     "pointsLoss": 0
   },
-  "players": [],
+  "players": [
+    {
+      "id": "6whcr3f",
+      "name": "Alexandre Barreto"
+    }
+  ],
   "matches": []
 }
