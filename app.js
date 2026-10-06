@@ -177,11 +177,10 @@
     const pts = { W: +s.pointsWin, D: +s.pointsDraw, L: +s.pointsLoss };
     const stats = {};
     for (const p of data.players) {
-      stats[p.id] = { id: p.id, name: p.name, games: 0, W: 0, D: 0, L: 0, pts: 0, gf: 0, ga: 0, mvp: 0, form: [], streak: 0, streakType: null, bestWin: 0, curWin: 0, partners: {}, history: [] };
+      stats[p.id] = { id: p.id, name: p.name, games: 0, W: 0, D: 0, L: 0, pts: 0, mvp: 0, form: [], streak: 0, streakType: null, bestWin: 0, curWin: 0, partners: {}, history: [] };
     }
     const matches = sortedMatches().slice().reverse(); // cronológico
     matches.forEach((m, idx) => {
-      const hasScore = Number.isFinite(m.scoreA) && Number.isFinite(m.scoreB);
       for (const side of ['A', 'B']) {
         const team = side === 'A' ? m.teamA : m.teamB;
         const r = resultFor(m, side);
@@ -189,7 +188,6 @@
           const st = stats[id];
           if (!st) continue;
           st.games++; st[r]++; st.pts += pts[r];
-          if (hasScore) { st.gf += side === 'A' ? m.scoreA : m.scoreB; st.ga += side === 'A' ? m.scoreB : m.scoreA; }
           st.form.push(r);
           st.streak = st.streakType === r ? st.streak + 1 : 1;
           st.streakType = r;
@@ -206,7 +204,7 @@
       if (m.mvp && stats[m.mvp]) stats[m.mvp].mvp++;
     });
     const table = Object.values(stats).filter(st => st.games > 0).sort((a, b) =>
-      b.pts - a.pts || b.W - a.W || (b.gf - b.ga) - (a.gf - a.ga) || a.games - b.games || a.name.localeCompare(b.name, 'pt'));
+      b.pts - a.pts || b.W - a.W || a.games - b.games || a.name.localeCompare(b.name, 'pt'));
     return { stats, table, rounds: matches.length };
   }
 
@@ -258,19 +256,16 @@
           </tbody>
         </table>
       </div>
-      <p class="small muted center">Vitória ${data.settings.pointsWin} pts · Empate ${data.settings.pointsDraw} · Derrota ${data.settings.pointsLoss}. Desempate: vitórias, diferença de golos, menos jogos.</p>`;
+      <p class="small muted center">Vitória ${data.settings.pointsWin} pts · Empate ${data.settings.pointsDraw} · Derrota ${data.settings.pointsLoss}. Desempate: vitórias, depois menos jogos.</p>`;
   }
 
   function matchCard(m, opts = {}) {
-    const hasScore = Number.isFinite(m.scoreA) && Number.isFinite(m.scoreB);
     const team = (side, ids) => `
       <div class="team ${side} ${m.result === side ? 'won' : ''}">
         <div class="tname">${side === 'A' ? 'Equipa A' : 'Equipa B'}${m.result === side ? ' 🏆' : ''}</div>
         <ul>${ids.map(id => `<li>${esc(pname(id))}</li>`).join('')}</ul>
       </div>`;
-    const center = hasScore
-      ? `${m.scoreA}–${m.scoreB}`
-      : (m.result === 'D' ? '=' : 'vs');
+    const center = m.result === 'D' ? '=' : 'vs';
     return `
       <div class="card">
         <div class="match-head">
@@ -313,7 +308,7 @@
       .map(([pid, v]) => ({ pid, ...v, rate: v.W / v.games }))
       .sort((a, b) => b.rate - a.rate || b.games - a.games);
     const streakTxt = s.streakType ? `${s.streak}${s.streakType === 'W' ? 'V' : s.streakType === 'D' ? 'E' : 'D'}` : '—';
-    const gd = s.gf - s.ga;
+    const { rounds } = compute();
     return `
       <a href="#/jogadores" class="small muted" style="text-decoration:none">‹ Jogadores</a>
       <div class="profile-head" style="margin-top:10px">${avatar(p, true)}
@@ -328,15 +323,13 @@
         <div class="stat"><div class="v">${streakTxt}</div><div class="k">Sequência</div></div>
         <div class="stat"><div class="v">${s.bestWin}</div><div class="k">Máx. vitórias</div></div>
         <div class="stat"><div class="v">${s.mvp}</div><div class="k">MVPs</div></div>
-        <div class="stat"><div class="v">${gd > 0 ? '+' : ''}${gd}</div><div class="k">Dif. golos</div></div>
+        <div class="stat"><div class="v">${pct(s.games, rounds)}%</div><div class="k">Presenças</div></div>
       </div>
       ${partners.length ? `<h3>Parceiros de equipa</h3><div class="card">${partners.slice(0, 6).map(x => `
         <div class="list-row"><span>${esc(pname(x.pid))}</span><span class="muted">${x.W}/${x.games} vitórias · <b style="color:var(--text)">${pct(x.W, x.games)}%</b></span></div>`).join('')}</div>` : ''}
       ${s.history.length ? `<h3>Histórico</h3><div class="card">${s.history.slice().reverse().map(h => {
         const m = h.m;
-        const hasScore = Number.isFinite(m.scoreA) && Number.isFinite(m.scoreB);
-        const sc = hasScore ? (h.side === 'A' ? `${m.scoreA}–${m.scoreB}` : `${m.scoreB}–${m.scoreA}`) : '';
-        return `<div class="list-row"><span><span class="badge ${h.r}">${h.r === 'W' ? 'V' : h.r === 'D' ? 'E' : 'D'}</span> &nbsp;Jornada ${h.round} <span class="muted small">· ${fmtDate(m.date)}</span></span><span class="muted">${sc}${m.mvp === id ? ' ⭐' : ''}</span></div>`;
+        return `<div class="list-row"><span><span class="badge ${h.r}">${h.r === 'W' ? 'V' : h.r === 'D' ? 'E' : 'D'}</span> &nbsp;Jornada ${h.round} <span class="muted small">· ${fmtDate(m.date)}</span></span><span class="muted">${m.mvp === id ? '⭐ MVP' : ''}</span></div>`;
       }).join('')}</div>` : ''}`;
   }
 
@@ -407,8 +400,8 @@
 
   function newDraft(m) {
     return m
-      ? { id: m.id, date: m.date, created: m.created, sides: Object.fromEntries([...m.teamA.map(i => [i, 'A']), ...m.teamB.map(i => [i, 'B'])]), result: m.result, scoreA: m.scoreA ?? '', scoreB: m.scoreB ?? '', mvp: m.mvp || '' }
-      : { id: null, date: todayISO(), sides: {}, result: null, scoreA: '', scoreB: '', mvp: '' };
+      ? { id: m.id, date: m.date, created: m.created, sides: Object.fromEntries([...m.teamA.map(i => [i, 'A']), ...m.teamB.map(i => [i, 'B'])]), result: m.result, mvp: m.mvp || '' }
+      : { id: null, date: todayISO(), sides: {}, result: null, mvp: '' };
   }
 
   function viewMatchForm(id) {
@@ -443,13 +436,6 @@
           <button class="A ${d.result === 'A' ? 'sel' : ''}" data-result="A">Ganhou A</button>
           <button class="D ${d.result === 'D' ? 'sel' : ''}" data-result="D">Empate</button>
           <button class="B ${d.result === 'B' ? 'sel' : ''}" data-result="B">Ganhou B</button>
-        </div>
-
-        <label class="fld">Golos (opcional)</label>
-        <div class="row" style="align-items:center">
-          <input id="m-sa" type="number" min="0" inputmode="numeric" placeholder="A" value="${esc(d.scoreA)}">
-          <span style="flex:none" class="muted">–</span>
-          <input id="m-sb" type="number" min="0" inputmode="numeric" placeholder="B" value="${esc(d.scoreB)}">
         </div>
 
         <label class="fld" for="m-mvp">MVP (opcional)</label>
@@ -499,8 +485,6 @@
     if (!draft) return;
     const v = id => document.getElementById(id)?.value;
     draft.date = v('m-date') ?? draft.date;
-    draft.scoreA = v('m-sa') ?? draft.scoreA;
-    draft.scoreB = v('m-sb') ?? draft.scoreB;
     draft.mvp = v('m-mvp') ?? draft.mvp;
   }
 
@@ -590,18 +574,10 @@
       const teamB = Object.keys(d.sides).filter(k => d.sides[k] === 'B');
       if (!d.date) return toast('Escolhe a data.', true);
       if (!teamA.length || !teamB.length) return toast('As duas equipas precisam de jogadores.', true);
-      const sa = d.scoreA === '' ? null : parseInt(d.scoreA, 10);
-      const sb = d.scoreB === '' ? null : parseInt(d.scoreB, 10);
-      let result = d.result;
-      if (Number.isFinite(sa) && Number.isFinite(sb)) {
-        const fromScore = sa > sb ? 'A' : sb > sa ? 'B' : 'D';
-        if (result && result !== fromScore) return toast('O resultado não bate com os golos.', true);
-        result = fromScore;
-      }
+      const result = d.result;
       if (!result) return toast('Indica quem ganhou.', true);
       const match = {
         id: d.id || uid(), date: d.date, created: d.created || Date.now(), teamA, teamB, result,
-        ...(Number.isFinite(sa) && Number.isFinite(sb) ? { scoreA: sa, scoreB: sb } : {}),
         ...(d.mvp && d.sides[d.mvp] ? { mvp: d.mvp } : {})
       };
       t.disabled = true;

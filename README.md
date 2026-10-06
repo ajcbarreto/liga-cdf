@@ -3,7 +3,7 @@
 Webapp (pensada para telemóvel) para gerir a liga semanal entre amigos com **pontuação individual**: as equipas mudam todas as semanas e cada jogador soma os pontos da equipa em que jogou.
 
 - Vitória **3** pts · Empate **1** · Derrota **0** (configurável em *Gerir → Definições*)
-- Desempate: vitórias, diferença de golos, menos jogos
+- Desempate: vitórias, depois menos jogos
 - Tabela com pódio, forma recente, sequências, % vitórias e MVPs
 - Perfil de cada jogador com histórico e melhores parceiros de equipa
 - Histórico de jornadas
