@@ -1,0 +1,10 @@
+{
+  "settings": {
+    "name": "Liga CDF",
+    "pointsWin": 3,
+    "pointsDraw": 1,
+    "pointsLoss": 0
+  },
+  "players": [],
+  "matches": []
+}
