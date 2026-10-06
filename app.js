@@ -17,6 +17,7 @@
   })();
   const DATA_PATH = 'data.json';
   const TOKEN_KEY = 'ligacdf.token';
+  const PIN_KEY = 'ligacdf.pin';
 
   const EMPTY = {
     settings: { name: 'Liga CDF', pointsWin: 3, pointsDraw: 1, pointsLoss: 0 },
@@ -38,8 +39,18 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
     del(k) { try { localStorage.removeItem(k); } catch {} }
   };
-  const token = () => store.get(TOKEN_KEY);
-  const isAdmin = () => !!token();
+  // No Vercel existe /api/save e o admin entra com PIN; no GitHub Pages usa token.
+  let pinMode = false;
+  const token = () => (pinMode ? null : store.get(TOKEN_KEY));
+  const pin = () => (pinMode ? store.get(PIN_KEY) : null);
+  const isAdmin = () => !!(pinMode ? pin() : token());
+  const callApi = body => fetch('api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  async function detectPinMode() {
+    try {
+      const r = await callApi({ action: 'ping' });
+      pinMode = r.ok && (await r.json()).pin === true;
+    } catch { pinMode = false; }
+  }
 
   // ---------- Utilitários ----------
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -126,35 +137,40 @@
   // Aplica uma alteração e grava no GitHub. mutate recebe uma cópia dos dados.
   async function commit(mutate, message) {
     if (saving) return false;
-    if (!token()) { toast('Entra como admin primeiro.', true); return false; }
+    if (!isAdmin()) { toast('Entra como admin primeiro.', true); return false; }
     saving = true;
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         const next = structuredClone(data);
         mutate(next);
-        const body = {
-          message: message || 'Atualizar dados da liga',
-          content: b64encode(JSON.stringify(next, null, 2) + '\n'),
-          branch: REPO.branch
-        };
-        if (sha) body.sha = sha;
-        const r = await fetch(apiUrl, {
-          method: 'PUT',
-          headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
+        const json = JSON.stringify(next, null, 2) + '\n';
+        const msg = message || 'Atualizar dados da liga';
+        let r;
+        if (pinMode) {
+          r = await callApi({ action: 'save', pin: pin(), content: json, sha, message: msg });
+        } else {
+          const body = { message: msg, content: b64encode(json), branch: REPO.branch };
+          if (sha) body.sha = sha;
+          r = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        }
         if (r.ok) {
           const j = await r.json();
-          sha = j.content.sha;
+          sha = pinMode ? j.sha : j.content.sha;
           data = next;
           return true;
         }
+        if (pinMode && r.status === 401) { store.del(PIN_KEY); render(); throw new Error('PIN errado. Volta a entrar.'); }
         if ((r.status === 409 || r.status === 422) && attempt === 0) {
           // Alguém gravou entretanto: recarrega e volta a aplicar a alteração.
           await load();
           continue;
         }
         if (r.status === 401 || r.status === 403) throw new Error('Sem permissão. Verifica o token.');
+        if (pinMode && r.status === 502) throw new Error('O servidor não conseguiu gravar no GitHub. Verifica o token no Vercel.');
         throw new Error(`Erro ao gravar (${r.status}).`);
       }
       throw new Error('Conflito ao gravar. Tenta outra vez.');
@@ -335,6 +351,15 @@
 
   // ---------- Admin ----------
   function viewLogin() {
+    if (pinMode) return `
+      <h2>Gerir a liga</h2>
+      <div class="card">
+        <p style="margin-top:0">Só o admin pode adicionar jogos. Introduz o PIN (fica guardado neste telemóvel).</p>
+        <label class="fld" for="pin">PIN</label>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••">
+        <div style="height:12px"></div>
+        <button class="btn block" id="login">Entrar</button>
+      </div>`;
     return `
       <h2>Gerir a liga</h2>
       <div class="card">
@@ -502,6 +527,17 @@
     const t = e.target.closest('button');
     if (!t) return;
 
+    if (t.id === 'login' && pinMode) {
+      const v = document.getElementById('pin').value.trim();
+      if (!v) return;
+      t.disabled = true;
+      const r = await callApi({ action: 'check', pin: v }).catch(() => null);
+      t.disabled = false;
+      if (!r || !r.ok) return toast('PIN errado.', true);
+      store.set(PIN_KEY, v);
+      toast('Entraste como admin');
+      return render();
+    }
     if (t.id === 'login') {
       const v = document.getElementById('tok').value.trim();
       if (!v) return;
@@ -517,7 +553,7 @@
       await load();
       return;
     }
-    if (t.id === 'logout') { store.del(TOKEN_KEY); toast('Saíste'); return render(); }
+    if (t.id === 'logout') { store.del(TOKEN_KEY); store.del(PIN_KEY); toast('Saíste'); return render(); }
     if (t.id === 'share') {
       const url = location.origin + location.pathname;
       if (navigator.share) navigator.share({ title: data.settings.name, url }).catch(() => {});
@@ -609,7 +645,7 @@
 
   $view.addEventListener('keydown', e => {
     if (e.key !== 'Enter') return;
-    const map = { 'new-player': 'add-player', 'quick-player': 'quick-add', tok: 'login' };
+    const map = { 'new-player': 'add-player', 'quick-player': 'quick-add', tok: 'login', pin: 'login' };
     const b = map[e.target.id] && document.getElementById(map[e.target.id]);
     if (b) { e.preventDefault(); b.click(); }
   });
@@ -619,5 +655,5 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && loaded && !draft) load(); });
 
   render();
-  load();
+  detectPinMode().then(load);
 })();
